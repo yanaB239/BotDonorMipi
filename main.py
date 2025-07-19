@@ -21,21 +21,17 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.client.default import DefaultBotProperties
 from openpyxl import Workbook, load_workbook
 
-# Конфигурация
 TOKEN = "8164683944:AAFblJC8b6i_2_poEqb7qnMnLd0WElfgG6Q"
 BOT_USERNAME: Final = '@MepiDonor_bot'
 ADMIN_PASSWORD_HASH = "5d5b09f6dcb2d53a5fffc60c4ac0d55fabdf556069d6631545f42aa6e3500f2e"
 EXCEL_FILE = "donor_data.xlsx"
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Инициализация бота
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=MemoryStorage())
 
-# Столбцы Excel таблицы
 COLUMNS = [
     "ID",
     "Telegram ID",
@@ -56,11 +52,7 @@ COLUMNS = [
     "DonorCoin"
 ]
 
-
-### Функции для работы с Excel ###
-
 def init_excel():
-    """Инициализация Excel файла при первом запуске"""
     if not os.path.exists(EXCEL_FILE):
         wb = Workbook()
         ws = wb.active
@@ -70,11 +62,10 @@ def init_excel():
 
 
 def add_donor(data: dict):
-    """Добавление нового донора в таблицу"""
     wb = load_workbook(EXCEL_FILE)
     ws = wb.active
 
-    donor_id = ws.max_row  # ID = номер строки
+    donor_id = ws.max_row
 
     ws.append([
         donor_id,
@@ -82,14 +73,14 @@ def add_donor(data: dict):
         data.get('full_name'),
         data.get('group'),
         data.get('category'),
-        0,  # Кол-во Гаврилова
-        0,  # Кол-во ФМБА
-        0,  # Сумма донаций
-        "",  # Дата последней донации Гаврилова
-        "",  # Дата последней донации ФМБА
-        "",  # Контакты соцсети
+        0,
+        0,
+        0,
+        "",
+        "",
+        "",
         data.get('phone'),
-        False,  # В регистре ДКМ
+        False,
         data.get('mailing_consent', False),
         datetime.now().strftime("%Y-%m-%d"),
         data.get('is_organizer', False),
@@ -100,7 +91,6 @@ def add_donor(data: dict):
 
 
 def get_donor_by_telegram_id(telegram_id: int) -> Optional[dict]:
-    """Получение информации о доноре по Telegram ID"""
     wb = load_workbook(EXCEL_FILE)
     ws = wb.active
 
@@ -129,7 +119,6 @@ def get_donor_by_telegram_id(telegram_id: int) -> Optional[dict]:
 
 
 def update_donor(telegram_id: int, data: dict) -> bool:
-    """Обновление данных донора"""
     wb = load_workbook(EXCEL_FILE)
     ws = wb.active
 
@@ -172,7 +161,6 @@ def update_donor(telegram_id: int, data: dict) -> bool:
 
 
 def get_all_donors():
-    """Получение списка всех доноров"""
     wb = load_workbook(EXCEL_FILE)
     ws = wb.active
 
@@ -202,7 +190,6 @@ def get_all_donors():
 
 
 def add_donation(telegram_id: int, center: str, date: str):
-    """Добавление записи о донации"""
     donor = get_donor_by_telegram_id(telegram_id)
     if not donor:
         return False
@@ -212,27 +199,26 @@ def add_donation(telegram_id: int, center: str, date: str):
             'gavrilovo_count': donor['gavrilovo_count'] + 1,
             'last_gavrilovo': date,
             'total_amount': donor['total_amount'] + 1,
-            'donor_coin': donor['donor_coin'] + 500  # Начисляем 500 коинов за донацию
+            'donor_coin': donor['donor_coin'] + 500
         }
     else:
         update_data = {
             'fmba_count': donor['fmba_count'] + 1,
             'last_fmba': date,
             'total_amount': donor['total_amount'] + 1,
-            'donor_coin': donor['donor_coin'] + 500  # Начисляем 500 коинов за донацию
+            'donor_coin': donor['donor_coin'] + 500
         }
 
     return update_donor(telegram_id, update_data)
 
 
 def get_donations_stats():
-    """Получение статистики по донациям"""
     wb = load_workbook(EXCEL_FILE)
     ws = wb.active
 
     total_gavrilovo = 0
     total_fmba = 0
-    total_donors = ws.max_row - 1  # минус заголовок
+    total_donors = ws.max_row - 1
 
     for row in ws.iter_rows(min_row=2, values_only=True):
         total_gavrilovo += row[5] or 0
@@ -244,9 +230,6 @@ def get_donations_stats():
         'total_fmba': total_fmba,
         'total_donations': total_gavrilovo + total_fmba
     }
-
-
-### Состояния FSM ###
 
 class RegistrationStates(StatesGroup):
     phone = State()
@@ -287,34 +270,25 @@ class ShopStates(StatesGroup):
     view_item = State()
     confirm_purchase = State()
 
-
-### Вспомогательные функции ###
-
 def validate_full_name(full_name: str) -> bool:
-    """Проверка корректности ФИО"""
     pattern = r'^[А-ЯЁ][а-яё]+\s[А-ЯЁ][а-яё]+(?:\s[А-ЯЁ][а-яё]+)?$'
     return re.fullmatch(pattern, full_name) is not None
 
 
 async def is_user_registered(telegram_id: int) -> bool:
-    """Проверка, зарегистрирован ли пользователь"""
     return get_donor_by_telegram_id(telegram_id) is not None
 
 
 async def is_organizer(telegram_id: int) -> bool:
-    """Проверка, является ли пользователь организатором"""
     donor = get_donor_by_telegram_id(telegram_id)
     return donor and donor.get('is_organizer', False)
 
 
 async def get_user_info(telegram_id: int) -> Optional[dict]:
-    """Получение информации о пользователе"""
     return get_donor_by_telegram_id(telegram_id)
 
 
 async def get_upcoming_donation_days(for_mifi: bool = True) -> list:
-    """Получение списка предстоящих дней донора"""
-    # В реальной реализации здесь должен быть парсинг дней донора
     return [
         {'id': 1, 'date': (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
          'center': 'Гаврилова', 'external_link': ''},
@@ -324,13 +298,11 @@ async def get_upcoming_donation_days(for_mifi: bool = True) -> list:
 
 
 async def get_donor_balance(telegram_id: int) -> int:
-    """Получение баланса DonorCoin"""
     donor = get_donor_by_telegram_id(telegram_id)
     return donor.get('donor_coin', 0) if donor else 0
 
 
 async def show_personal_cabinet(message: types.Message):
-    """Отображение личного кабинета"""
     user_info = await get_user_info(message.from_user.id)
     if not user_info:
         await message.answer("❌ Не удалось загрузить ваши данные. Попробуйте позже.")
@@ -364,7 +336,6 @@ async def show_personal_cabinet(message: types.Message):
 
 
 async def show_organizer_panel(message: types.Message):
-    """Отображение панели организатора"""
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📝 Создать День Донора", callback_data="create_dd")],
@@ -381,13 +352,8 @@ async def show_organizer_panel(message: types.Message):
         "Выберите действие:",
         reply_markup=kb
     )
-
-
-### Обработчики команд ###
-
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
-    """Обработчик команды /start"""
     if await is_organizer(message.from_user.id):
         await show_organizer_panel(message)
     elif await is_user_registered(message.from_user.id):
@@ -427,7 +393,7 @@ async def organizer_password_check(message: types.Message, state: FSMContext):
     password = message.text.strip()
     hashed_password = hashlib.sha256(password.encode()).hexdigest()
     print(hashed_password)
-    logger.info(f"Input password hash: {hashed_password}")  # Для отладки
+    logger.info(f"Input password hash: {hashed_password}")
 
     if hashed_password != ADMIN_PASSWORD_HASH:
         await message.answer("❌ Неверный пароль. Попробуйте еще раз.")
@@ -441,7 +407,6 @@ async def organizer_password_check(message: types.Message, state: FSMContext):
 
 @dp.message(OrganizerRegistrationStates.full_name)
 async def organizer_registration_complete(message: types.Message, state: FSMContext):
-    """Завершение регистрации организатора"""
     full_name = message.text.strip()
 
     if not validate_full_name(full_name):
@@ -449,11 +414,8 @@ async def organizer_registration_complete(message: types.Message, state: FSMCont
             "❌ Неверный формат ФИО. Пожалуйста, введите в формате: Фамилия Имя Отчество"
         )
         return
-
-    # Проверяем, есть ли уже такой организатор
     donor = get_donor_by_telegram_id(message.from_user.id)
     if donor:
-        # Обновляем данные существующего пользователя
         update_donor(message.from_user.id, {
             'full_name': full_name,
             'is_organizer': True,
@@ -461,7 +423,6 @@ async def organizer_registration_complete(message: types.Message, state: FSMCont
             'dkm_member': True
         })
     else:
-        # Создаем нового организатора
         add_donor({
             'telegram_id': message.from_user.id,
             'full_name': full_name,
@@ -484,7 +445,6 @@ async def organizer_registration_complete(message: types.Message, state: FSMCont
 
 @dp.message(RegistrationStates.phone, F.contact)
 async def contact_received(message: types.Message, state: FSMContext):
-    """Обработка полученного контакта"""
     phone = message.contact.phone_number
     await state.update_data(phone=phone)
     await message.answer(
@@ -496,7 +456,6 @@ async def contact_received(message: types.Message, state: FSMContext):
 
 @dp.message(RegistrationStates.full_name)
 async def full_name_received(message: types.Message, state: FSMContext):
-    """Обработка полученного ФИО"""
     full_name = message.text.strip()
 
     if not validate_full_name(full_name):
@@ -527,7 +486,6 @@ async def full_name_received(message: types.Message, state: FSMContext):
 
 @dp.message(RegistrationStates.category)
 async def category_received(message: types.Message, state: FSMContext):
-    """Обработка выбранной категории"""
     category = message.text.lower()
     valid_categories = ['студент', 'сотрудник', 'внешний донор']
 
@@ -550,14 +508,12 @@ async def category_received(message: types.Message, state: FSMContext):
 
 @dp.message(RegistrationStates.group)
 async def group_received(message: types.Message, state: FSMContext):
-    """Обработка введенной группы"""
     group = message.text.strip()
     await state.update_data(group=group)
     await ask_for_consent(message, state)
 
 
 async def ask_for_consent(message: types.Message, state: FSMContext):
-    """Запрос согласия на обработку данных"""
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="✅ Даю согласие", callback_data="consent_yes")],
@@ -575,7 +531,6 @@ async def ask_for_consent(message: types.Message, state: FSMContext):
 
 @dp.callback_query(RegistrationStates.consent, F.data.startswith("consent_"))
 async def consent_received(callback: types.CallbackQuery, state: FSMContext):
-    """Обработка ответа на согласие"""
     if callback.data == "consent_no":
         await callback.message.answer(
             "❌ Регистрация отменена. Без согласия на обработку персональных данных "
@@ -617,19 +572,15 @@ async def consent_received(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(RegistrationStates.mailing_consent, F.data.startswith("mailing_"))
 async def mailing_consent_received(callback: types.CallbackQuery, state: FSMContext):
-    """Обработка согласия на рассылку"""
     mailing_consent = callback.data == "mailing_yes"
     await state.update_data(mailing_consent=mailing_consent)
 
     data = await state.get_data()
-
-    # Проверяем, не зарегистрирован ли уже пользователь
     if get_donor_by_telegram_id(callback.from_user.id):
         await callback.message.answer("❌ Этот номер телефона уже зарегистрирован.")
         await state.clear()
         return
 
-    # Добавляем нового донора
     add_donor({
         'telegram_id': callback.from_user.id,
         'phone': data['phone'],
@@ -656,7 +607,6 @@ async def mailing_consent_received(callback: types.CallbackQuery, state: FSMCont
 
 @dp.callback_query(F.data == "my_data")
 async def show_user_data(callback: types.CallbackQuery):
-    """Показ данных пользователя"""
     user_info = await get_user_info(callback.from_user.id)
     if not user_info:
         await callback.message.answer("❌ Не удалось загрузить ваши данные.")
@@ -682,7 +632,6 @@ async def show_user_data(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "donation_history")
 async def show_donation_history(callback: types.CallbackQuery):
-    """Показ истории донаций"""
     user_info = await get_user_info(callback.from_user.id)
     if not user_info:
         await callback.message.answer("❌ Не удалось загрузить ваши данные.")
@@ -713,7 +662,6 @@ async def show_donation_history(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "donation_info")
 async def show_donation_info(callback: types.CallbackQuery):
-    """Информация о донорстве"""
     text = (
         "ℹ️ <b>Информация о донорстве</b>\n\n"
         "🔹 <b>Перед сдачей крови:</b>\n"
@@ -734,7 +682,6 @@ async def show_donation_info(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "ask_question")
 async def ask_question(callback: types.CallbackQuery, state: FSMContext):
-    """Запрос вопроса организатору"""
     await callback.message.answer(
         "✍️ Напишите ваш вопрос организаторам:",
         reply_markup=ReplyKeyboardRemove()
@@ -745,7 +692,6 @@ async def ask_question(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(QuestionStates.input_question)
 async def question_received(message: types.Message, state: FSMContext):
-    """Обработка вопроса организатору"""
     question = message.text.strip()
 
     if len(question) < 10:
@@ -758,7 +704,6 @@ async def question_received(message: types.Message, state: FSMContext):
         await state.clear()
         return
 
-    # В реальной реализации здесь нужно сохранить вопрос (можно добавить отдельный лист в Excel)
     await message.answer(
         "✅ Ваш вопрос отправлен организаторам. "
         "Мы пришлем ответ в этом чате, как только он будет готов."
@@ -768,7 +713,6 @@ async def question_received(message: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data == "register_dd")
 async def register_for_donation_day(callback: types.CallbackQuery, state: FSMContext):
-    """Запись на день донора"""
     if not await is_user_registered(callback.from_user.id):
         await callback.message.answer("Сначала нужно зарегистрироваться. Нажми /start")
         await callback.answer()
@@ -807,7 +751,6 @@ async def register_for_donation_day(callback: types.CallbackQuery, state: FSMCon
 
 @dp.callback_query(DonationDayStates.select_day, F.data.startswith("dd_day_"))
 async def donation_day_selected(callback: types.CallbackQuery, state: FSMContext):
-    """Обработка выбранного дня донора"""
     day_id = int(callback.data.split("_")[2])
     await state.update_data(day_id=day_id)
 
@@ -839,7 +782,6 @@ async def donation_day_selected(callback: types.CallbackQuery, state: FSMContext
 
 @dp.callback_query(DonationDayStates.confirm, F.data == "dd_confirm")
 async def donation_day_confirmed(callback: types.CallbackQuery, state: FSMContext):
-    """Подтверждение записи на день донора"""
     data = await state.get_data()
     day_id = data['day_id']
 
@@ -851,7 +793,6 @@ async def donation_day_confirmed(callback: types.CallbackQuery, state: FSMContex
         await state.clear()
         return
 
-    # Добавляем запись о донации
     if add_donation(callback.from_user.id, selected_day['center'], selected_day['date']):
         await callback.message.answer(
             "✅ Ты успешно записался на День Донора!\n\n"
@@ -868,7 +809,6 @@ async def donation_day_confirmed(callback: types.CallbackQuery, state: FSMContex
 
 @dp.callback_query(F.data == "donation_confirmed")
 async def confirm_donation(callback: types.CallbackQuery):
-    """Подтверждение донации (для организаторов)"""
     donor_id = callback.from_user.id
     donor = get_donor_by_telegram_id(donor_id)
 
@@ -888,8 +828,6 @@ async def confirm_donation(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "shop")
 async def show_shop(callback: types.CallbackQuery, state: FSMContext):
-    """Показ магазина мерча"""
-    # В реальной реализации здесь должен быть список товаров
     items = [
         {'id': 1, 'name': 'Футболка "Я донор"', 'price': 300},
         {'id': 2, 'name': 'Значок донора', 'price': 150},
@@ -924,10 +862,8 @@ async def show_shop(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(ShopStates.browse, F.data.startswith("item_"))
 async def view_shop_item(callback: types.CallbackQuery, state: FSMContext):
-    """Просмотр товара в магазине"""
     item_id = int(callback.data.split("_")[1])
 
-    # В реальной реализации здесь должна быть загрузка информации о товаре
     items = {
         1: {'name': 'Футболка "Я донор"', 'description': 'Стильная хлопковая футболка', 'price': 300},
         2: {'name': 'Значок донора', 'description': 'Металлический значок', 'price': 150},
@@ -962,7 +898,6 @@ async def view_shop_item(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(ShopStates.view_item, F.data.startswith("buy_"))
 async def confirm_purchase(callback: types.CallbackQuery, state: FSMContext):
-    """Подтверждение покупки"""
     data = await state.get_data()
     item_id = data['item_id']
     item_price = data['item_price']
@@ -992,11 +927,9 @@ async def confirm_purchase(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(ShopStates.confirm_purchase, F.data.startswith("confirm_buy_"))
 async def process_purchase(callback: types.CallbackQuery, state: FSMContext):
-    """Обработка покупки"""
     item_id = int(callback.data.split("_")[2])
     donor_id = callback.from_user.id
 
-    # В реальной реализации здесь должно быть списание средств и оформление заказа
     donor = get_donor_by_telegram_id(donor_id)
     if not donor:
         await callback.message.answer("❌ Ошибка: пользователь не найден.")
@@ -1020,8 +953,6 @@ async def process_purchase(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.answer("❌ Недостаточно DonorCoin для покупки.")
         await state.clear()
         return
-
-    # Обновляем баланс
     new_balance = donor['donor_coin'] - item['price']
     update_donor(donor_id, {'donor_coin': new_balance})
 
@@ -1032,15 +963,12 @@ async def process_purchase(callback: types.CallbackQuery, state: FSMContext):
         "Организаторы свяжутся с вами для уточнения деталей."
     )
 
-    # Уведомляем организаторов (в реальной реализации)
     await state.clear()
     await callback.answer()
 
 
 @dp.callback_query(F.data == "view_questions")
 async def view_questions(callback: types.CallbackQuery, state: FSMContext):
-    """Просмотр вопросов от доноров (для организаторов)"""
-    # В реальной реализации здесь должна быть загрузка вопросов
     await callback.message.answer(
         "❓ <b>Список вопросов от доноров</b>\n\n"
         "В текущей реализации вопросы не сохраняются. "
@@ -1051,7 +979,6 @@ async def view_questions(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data == "make_mailing")
 async def make_mailing(callback: types.CallbackQuery, state: FSMContext):
-    """Рассылка сообщений (для организаторов)"""
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="👨‍🎓 Для МИФИ", callback_data="mailing_mifi")],
@@ -1070,7 +997,6 @@ async def make_mailing(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(MailingStates.select_recipients, F.data.startswith("mailing_"))
 async def select_mailing_recipients(callback: types.CallbackQuery, state: FSMContext):
-    """Выбор получателей рассылки"""
     mailing_type = callback.data.split("_")[1]
     await state.update_data(mailing_type=mailing_type)
 
@@ -1084,7 +1010,6 @@ async def select_mailing_recipients(callback: types.CallbackQuery, state: FSMCon
 
 @dp.message(MailingStates.input_message)
 async def input_mailing_message(message: types.Message, state: FSMContext):
-    """Ввод текста рассылки"""
     mailing_text = message.text.strip()
     if len(mailing_text) < 10:
         await message.answer("❌ Текст рассылки слишком короткий. Пожалуйста, напишите более развернутое сообщение.")
@@ -1122,7 +1047,6 @@ async def input_mailing_message(message: types.Message, state: FSMContext):
 
 @dp.callback_query(MailingStates.confirm, F.data == "mailing_confirm")
 async def confirm_mailing(callback: types.CallbackQuery, state: FSMContext):
-    """Подтверждение рассылки"""
     data = await state.get_data()
     mailing_type = data['mailing_type']
     mailing_text = data['mailing_text']
@@ -1166,7 +1090,6 @@ async def confirm_mailing(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data == "create_dd")
 async def create_donation_day(callback: types.CallbackQuery):
-    """Создание дня донора (заглушка)"""
     await callback.message.answer(
         "Функционал создания Дня Донора будет реализован в следующей версии."
     )
@@ -1175,7 +1098,6 @@ async def create_donation_day(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "stats")
 async def show_stats(callback: types.CallbackQuery):
-    """Показ статистики"""
     stats = get_donations_stats()
     donors = get_all_donors()
 
@@ -1200,7 +1122,6 @@ async def show_stats(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "manage_shop")
 async def manage_shop(callback: types.CallbackQuery):
-    """Управление магазином (заглушка)"""
     await callback.message.answer(
         "Функционал управления магазином будет реализован в следующей версии."
     )
@@ -1209,7 +1130,6 @@ async def manage_shop(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "export_data")
 async def export_data(callback: types.CallbackQuery):
-    """Экспорт данных в Excel"""
     try:
         with open(EXCEL_FILE, 'rb') as file:
             await bot.send_document(
@@ -1229,7 +1149,6 @@ async def export_data(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data.in_(["back_to_shop", "back_to_cabinet"]))
 async def handle_back_buttons(callback: types.CallbackQuery, state: FSMContext):
-    """Обработка кнопок возврата"""
     try:
         if callback.data == "back_to_shop":
             await show_shop(callback, state)
@@ -1247,7 +1166,6 @@ async def handle_back_buttons(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(ShopStates.view_item, F.data == "back_to_cabinet")
 @dp.callback_query(ShopStates.confirm_purchase, F.data == "back_to_cabinet")
 async def back_to_cabinet_from_shop(callback: types.CallbackQuery, state: FSMContext):
-    """Возврат в кабинет из магазина"""
     try:
         await state.clear()
         await callback.message.delete()
@@ -1260,7 +1178,6 @@ async def back_to_cabinet_from_shop(callback: types.CallbackQuery, state: FSMCon
 
 @dp.message(Command("cabinet"))
 async def cmd_cabinet(message: types.Message):
-    """Обработчик команды /cabinet"""
     if await is_organizer(message.from_user.id):
         await show_organizer_panel(message)
     elif not await is_user_registered(message.from_user.id):
