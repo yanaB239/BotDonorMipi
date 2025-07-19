@@ -18,25 +18,19 @@ from datetime import datetime, timedelta
 import sqlite3
 import re
 
-# Токен и имя бота
 TOKEN: Final = '8164683944:AAFblJC8b6i_2_poEqb7qnMnLd0WElfgG6Q'
 BOT_USERNAME: Final = '@MepiDonor_bot'
 
-# Настройка логов
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Инициализация бота
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=MemoryStorage())
 
-
-# Инициализация БД
 def init_db():
     conn = sqlite3.connect('donor_bot.db')
     cursor = conn.cursor()
 
-    # Таблица доноров
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS donors (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,7 +45,6 @@ def init_db():
     )
     ''')
 
-    # Таблица донаций
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS donations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +57,6 @@ def init_db():
     )
     ''')
 
-    # Таблица дней донора
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS donation_days (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,7 +66,6 @@ def init_db():
     )
     ''')
 
-    # Таблица вопросов
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS questions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,8 +82,6 @@ def init_db():
 
 init_db()
 
-
-# Машина состояний для регистрации
 class RegistrationStates(StatesGroup):
     phone = State()
     full_name = State()
@@ -100,25 +89,17 @@ class RegistrationStates(StatesGroup):
     group = State()
     consent = State()
 
-
-# Машина состояний для записи на ДД
 class DonationDayStates(StatesGroup):
     select_day = State()
     confirm = State()
 
-
-# Машина состояний для вопроса организатору
 class QuestionStates(StatesGroup):
     input_question = State()
 
-
-# Валидация ФИО
 def validate_full_name(full_name: str) -> bool:
     pattern = r'^[А-ЯЁ][а-яё]+\s[А-ЯЁ][а-яё]+(?:\s[А-ЯЁ][а-яё]+)?$'
     return re.fullmatch(pattern, full_name) is not None
 
-
-# Проверка, зарегистрирован ли пользователь
 async def is_user_registered(telegram_id: int) -> bool:
     conn = sqlite3.connect('donor_bot.db')
     cursor = conn.cursor()
@@ -127,8 +108,6 @@ async def is_user_registered(telegram_id: int) -> bool:
     conn.close()
     return result is not None
 
-
-# Получение информации о пользователе
 async def get_user_info(telegram_id: int) -> Optional[dict]:
     conn = sqlite3.connect('donor_bot.db')
     cursor = conn.cursor()
@@ -148,8 +127,6 @@ async def get_user_info(telegram_id: int) -> Optional[dict]:
         }
     return None
 
-
-# Получение списка предстоящих Дней Донора
 async def get_upcoming_donation_days() -> list:
     conn = sqlite3.connect('donor_bot.db')
     cursor = conn.cursor()
@@ -164,8 +141,6 @@ async def get_upcoming_donation_days() -> list:
 
     return [{'id': day[0], 'date': day[1], 'center': day[2]} for day in days]
 
-
-# Стартовая команда
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
     if await is_user_registered(message.from_user.id):
@@ -188,8 +163,6 @@ async def cmd_start(message: types.Message, state: FSMContext):
         )
         await state.set_state(RegistrationStates.phone)
 
-
-# Получение контакта
 @dp.message(RegistrationStates.phone, F.contact)
 async def contact_received(message: types.Message, state: FSMContext):
     phone = message.contact.phone_number
@@ -200,8 +173,6 @@ async def contact_received(message: types.Message, state: FSMContext):
     )
     await state.set_state(RegistrationStates.full_name)
 
-
-# Получение ФИО
 @dp.message(RegistrationStates.full_name)
 async def full_name_received(message: types.Message, state: FSMContext):
     full_name = message.text.strip()
@@ -231,8 +202,6 @@ async def full_name_received(message: types.Message, state: FSMContext):
     )
     await state.set_state(RegistrationStates.category)
 
-
-# Получение категории
 @dp.message(RegistrationStates.category)
 async def category_received(message: types.Message, state: FSMContext):
     category = message.text.lower()
@@ -254,16 +223,12 @@ async def category_received(message: types.Message, state: FSMContext):
         await state.update_data(group=None)
         await ask_for_consent(message, state)
 
-
-# Получение группы (для студентов)
 @dp.message(RegistrationStates.group)
 async def group_received(message: types.Message, state: FSMContext):
     group = message.text.strip()
     await state.update_data(group=group)
     await ask_for_consent(message, state)
 
-
-# Запрос согласия
 async def ask_for_consent(message: types.Message, state: FSMContext):
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -280,8 +245,6 @@ async def ask_for_consent(message: types.Message, state: FSMContext):
     )
     await state.set_state(RegistrationStates.consent)
 
-
-# Обработка согласия
 @dp.callback_query(RegistrationStates.consent, F.data.startswith("consent_"))
 async def consent_received(callback: types.CallbackQuery, state: FSMContext):
     if callback.data == "consent_no":
@@ -294,7 +257,6 @@ async def consent_received(callback: types.CallbackQuery, state: FSMContext):
 
     data = await state.get_data()
 
-    # Сохранение в БД
     conn = sqlite3.connect('donor_bot.db')
     cursor = conn.cursor()
 
@@ -332,8 +294,6 @@ async def consent_received(callback: types.CallbackQuery, state: FSMContext):
     await show_personal_cabinet(callback.message)
     await state.clear()
 
-
-# Команда личного кабинета
 @dp.message(Command("cabinet"))
 async def cmd_cabinet(message: types.Message):
     if not await is_user_registered(message.from_user.id):
@@ -342,15 +302,12 @@ async def cmd_cabinet(message: types.Message):
 
     await show_personal_cabinet(message)
 
-
-# Показ личного кабинета
 async def show_personal_cabinet(message: types.Message):
     user_info = await get_user_info(message.from_user.id)
     if not user_info:
         await message.answer("❌ Не удалось загрузить ваши данные. Попробуйте позже.")
         return
 
-    # Получаем количество донаций
     conn = sqlite3.connect('donor_bot.db')
     cursor = conn.cursor()
     cursor.execute('''
@@ -383,8 +340,6 @@ async def show_personal_cabinet(message: types.Message):
         reply_markup=kb
     )
 
-
-# Обработка кнопок личного кабинета
 @dp.callback_query(F.data.in_(["my_data", "donation_history", "donation_info", "ask_question"]))
 async def cabinet_buttons_handler(callback: types.CallbackQuery):
     if callback.data == "my_data":
@@ -396,8 +351,6 @@ async def cabinet_buttons_handler(callback: types.CallbackQuery):
     elif callback.data == "ask_question":
         await ask_question(callback)
 
-
-# Показ данных пользователя
 async def show_user_data(callback: types.CallbackQuery):
     user_info = await get_user_info(callback.from_user.id)
     if not user_info:
@@ -414,8 +367,6 @@ async def show_user_data(callback: types.CallbackQuery):
     )
     await callback.answer()
 
-
-# Показ истории донаций
 async def show_donation_history(callback: types.CallbackQuery):
     conn = sqlite3.connect('donor_bot.db')
     cursor = conn.cursor()
@@ -448,8 +399,6 @@ async def show_donation_history(callback: types.CallbackQuery):
     await callback.message.answer(text)
     await callback.answer()
 
-
-# Показ информации о донорстве
 async def show_donation_info(callback: types.CallbackQuery):
     text = (
         "ℹ️ <b>Информация о донорстве</b>\n\n"
@@ -468,8 +417,6 @@ async def show_donation_info(callback: types.CallbackQuery):
     await callback.message.answer(text, disable_web_page_preview=True)
     await callback.answer()
 
-
-# Запись на День Донора
 @dp.callback_query(F.data == "register_dd")
 async def register_for_donation_day(callback: types.CallbackQuery, state: FSMContext):
     if not await is_user_registered(callback.from_user.id):
@@ -499,8 +446,6 @@ async def register_for_donation_day(callback: types.CallbackQuery, state: FSMCon
     await state.set_state(DonationDayStates.select_day)
     await callback.answer()
 
-
-# Обработка выбора дня
 @dp.callback_query(DonationDayStates.select_day, F.data.startswith("dd_day_"))
 async def donation_day_selected(callback: types.CallbackQuery, state: FSMContext):
     day_id = int(callback.data.split("_")[2])
@@ -534,8 +479,6 @@ async def donation_day_selected(callback: types.CallbackQuery, state: FSMContext
     await state.set_state(DonationDayStates.confirm)
     await callback.answer()
 
-
-# Подтверждение записи
 @dp.callback_query(DonationDayStates.confirm, F.data == "dd_confirm")
 async def donation_day_confirmed(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -544,7 +487,6 @@ async def donation_day_confirmed(callback: types.CallbackQuery, state: FSMContex
     conn = sqlite3.connect('donor_bot.db')
     cursor = conn.cursor()
 
-    # Получаем информацию о пользователе
     cursor.execute('SELECT id, category FROM donors WHERE telegram_id = ?', (callback.from_user.id,))
     donor = cursor.fetchone()
 
@@ -556,7 +498,6 @@ async def donation_day_confirmed(callback: types.CallbackQuery, state: FSMContex
 
     donor_id, category = donor
 
-    # Получаем информацию о дне донора
     cursor.execute('SELECT date, center, external_link FROM donation_days WHERE id = ?', (day_id,))
     day = cursor.fetchone()
 
@@ -568,7 +509,6 @@ async def donation_day_confirmed(callback: types.CallbackQuery, state: FSMContex
 
     date, center, external_link = day
 
-    # Для внешних доноров отправляем ссылку
     if category == 'внешний донор' and external_link:
         await callback.message.answer(
             f"🔗 Для завершения регистрации перейди по ссылке:\n{external_link}"
@@ -577,7 +517,6 @@ async def donation_day_confirmed(callback: types.CallbackQuery, state: FSMContex
         conn.close()
         return
 
-    # Записываем донора
     try:
         cursor.execute('''
             INSERT INTO donations (donor_id, date, center, type)
@@ -602,16 +541,11 @@ async def donation_day_confirmed(callback: types.CallbackQuery, state: FSMContex
     await state.clear()
     await callback.answer()
 
-
-# Отмена записи
 @dp.callback_query(DonationDayStates.confirm, F.data == "dd_cancel")
 async def donation_day_canceled(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.answer("❌ Запись отменена.")
     await state.clear()
     await callback.answer()
-
-
-# Вопрос организатору
 async def ask_question(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.answer(
         "✍️ Напиши свой вопрос организатору Дня Донора. "
@@ -621,8 +555,6 @@ async def ask_question(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(QuestionStates.input_question)
     await callback.answer()
 
-
-# Получение вопроса
 @dp.message(QuestionStates.input_question)
 async def question_received(message: types.Message, state: FSMContext):
     question = message.text.strip()
@@ -634,7 +566,6 @@ async def question_received(message: types.Message, state: FSMContext):
     conn = sqlite3.connect('donor_bot.db')
     cursor = conn.cursor()
 
-    # Получаем ID донора
     cursor.execute('SELECT id FROM donors WHERE telegram_id = ?', (message.from_user.id,))
     donor = cursor.fetchone()
 
@@ -646,7 +577,6 @@ async def question_received(message: types.Message, state: FSMContext):
 
     donor_id = donor[0]
 
-    # Сохраняем вопрос
     try:
         cursor.execute('''
             INSERT INTO questions (donor_id, text)
@@ -668,8 +598,6 @@ async def question_received(message: types.Message, state: FSMContext):
     )
     await state.clear()
 
-
-# Запуск бота
 if __name__ == "__main__":
     import asyncio
 
